@@ -154,8 +154,7 @@ def load_vars(path, vars, backend='pkl'):
                         "but removed from the storage request: {0:s}".format(
                     ', '.join(["'{0:s}'".format(var) for var in additional_vars])))
             return cache
-    else:
-        raise ValueError('Unknown storage backend {0}'.format(backend))
+
 
 def save_vars(path, vars_d, backend='pkl'):
     """Save variables into a pickle file.
