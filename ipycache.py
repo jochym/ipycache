@@ -20,7 +20,6 @@ from IPython.utils.io import CapturedIO, capture_output
 from IPython.display import clear_output
 import hashlib
 
-
 #------------------------------------------------------------------------------
 # Six utility functions for Python 2/3 compatibility
 #------------------------------------------------------------------------------
@@ -113,14 +112,24 @@ def load_vars(path, vars, backend='pkl'):
       * cache: a dictionary {var_name: var_value}.
 
     """
-    if backend in ('pkl', 'pkl.gz'):
-        if backend=='pkl':
-            open_fn = open
-        else:
-            open_fn = gzip.open
-
-        with open_fn(path, 'rb') as f:
-            # Load the variables from the cache.
+    with open(path, 'rb') as f:
+        # Load the variables from the cache.
+        try:
+            restricted_loads(f.read())
+            cache = pickle.load(f)
+        except EOFError as e:
+            cache={}
+            #raise IOError(str(e))
+        
+        # Check that all requested variables could be loaded successfully
+        # from the cache.
+        missing_vars = sorted(set(vars) - set(cache.keys()))
+        if missing_vars:
+            raise ValueError(("The following variables could not be loaded "
+                "from the cache: {0:s}").format(
+                ', '.join(["'{0:s}'".format(var) for var in missing_vars])))
+        additional_vars = sorted(set(cache.keys()) - set(vars))
+        for hidden_variable in '_captured_io', '_cell_md5':
             try:
                 cache = pickle.load(f)
             except EOFError as e:
@@ -157,14 +166,34 @@ def save_vars(path, vars_d, backend='pkl'):
       * vars_d: a dictionary {var_name: var_value}.
 
     """
-    if backend=='pkl':
-        with open(path, 'wb') as f:
-            pickle.dump(vars_d, f)
-    elif backend=='pkl.gz':
-        with gzip.open(path, 'wb') as f:
-            pickle.dump(vars_d, f)
-    else:
-        raise ValueError('Unknown storage backend {0}'.format(backend))
+    with open(path, 'wb') as f:
+        dump(vars_d, f)
+
+
+# ------------------------------------------------------------------------------
+# RestrictedUnpickler - For mitigating arbitrary code execution while unpickling
+# This function provides restriction of using only the io module
+# ------------------------------------------------------------------------------
+class RestrictedUnpickler(pickle.Unpickler):
+    safe_modules = {
+        '_io',
+        'builtins'
+    }
+
+    safe_builtins = {
+        'StringIO'
+    }
+
+    def find_class(self, module, name):
+        if module in self.safe_modules and name in self.safe_builtins:
+            return getattr(sys.modules[module], name)
+        # Forbid everything else.
+        raise pickle.UnpicklingError("global '%s.%s' is forbidden" %
+                                     (module, name))
+
+def restricted_loads(s):
+    """Helper function analogous to pickle.loads()."""
+    return RestrictedUnpickler(io.BytesIO(s)).load()
 
 #------------------------------------------------------------------------------
 # CapturedIO
