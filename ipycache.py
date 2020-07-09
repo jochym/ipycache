@@ -8,7 +8,7 @@ long-lasting computations.
 #------------------------------------------------------------------------------
 
 # Stdlib
-import inspect, os, sys, textwrap, re
+import inspect, os, sys, textwrap, re, io
 import gzip
 
 # Our own
